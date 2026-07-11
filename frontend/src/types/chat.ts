@@ -44,3 +44,47 @@ export type InterviewApiResponse = {
   missingFields: string[];
   interviewComplete: boolean;
 };
+
+export type RecommendationDifficulty = "low" | "medium" | "high";
+
+export type SevenDayPlanItem = {
+  day: number;
+  task: string;
+};
+
+export type ProjectRecommendation = {
+  id: string;
+  title: string;
+  oneSentenceSummary: string;
+  problem: string;
+  targetUsers: string[];
+  whySuitable: string[];
+  teamAdvantages: string[];
+  missingCapabilities: string[];
+  requiredSkills: string[];
+  coreFeatures: string[];
+  estimatedDifficulty: RecommendationDifficulty;
+  estimatedDurationWeeks: number;
+  estimatedBudget: string;
+  innovationPotential: string;
+  implementationRisk: string[];
+  recommendedCompetitionTrack: string[];
+  nextSevenDaysPlan: SevenDayPlanItem[];
+  needsFurtherValidation: string[];
+};
+
+export type RecommendationRequest = {
+  confirmedProfile: TeamProfile;
+};
+
+export type RecommendationResponse = {
+  recommendations: ProjectRecommendation[];
+  profileSummary: string;
+  warnings: string[];
+  source: "ai" | "fallback";
+};
+
+export type SelectedProject = {
+  recommendation: ProjectRecommendation;
+  selectedAt: string;
+};

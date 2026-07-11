@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import ChatInput from "@/components/ChatInput";
 import ChatMessage from "@/components/ChatMessage";
@@ -84,6 +85,22 @@ function isInterviewApiResponse(value: unknown): value is InterviewApiResponse {
   );
 }
 
+function getRecommendationMissingFields(profile: TeamProfileType) {
+  const missingFields: string[] = [];
+
+  if (profile.membersAndMajors.length === 0) missingFields.push("成员与专业");
+  if (profile.skills.length === 0) missingFields.push("技能");
+  if (profile.interests.length === 0) missingFields.push("兴趣方向");
+  if (profile.competitions.length === 0 && profile.targetAwards.length === 0) {
+    missingFields.push("比赛或目标奖项");
+  }
+  if (profile.resources.length === 0 && profile.timeAndBudget.length === 0) {
+    missingFields.push("可用资源或时间预算");
+  }
+
+  return missingFields;
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>(initialMessages);
   const [input, setInput] = useState("");
@@ -92,6 +109,8 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [retryPayload, setRetryPayload] = useState<RetryPayload | null>(null);
+  const recommendationMissingFields = getRecommendationMissingFields(teamProfile);
+  const canViewRecommendations = recommendationMissingFields.length === 0;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -233,7 +252,29 @@ export default function ChatPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
               ProjectMentor Interview
             </p>
-            <h1 className="mt-2 text-2xl font-bold">AI 创业导师</h1>
+            <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h1 className="text-2xl font-bold">AI 创业导师</h1>
+                {canViewRecommendations ? (
+                  <p className="mt-2 text-sm text-emerald-700">
+                    团队画像已足够生成第一版项目方向，你仍然可以继续补充信息。
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm text-zinc-500">
+                    距离推荐还缺：{recommendationMissingFields.join("、")}。
+                  </p>
+                )}
+              </div>
+
+              {canViewRecommendations ? (
+                <Link
+                  href="/recommendations"
+                  className="inline-flex rounded-xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800"
+                >
+                  查看项目推荐
+                </Link>
+              ) : null}
+            </div>
           </header>
 
           <div className="flex-1 space-y-5 overflow-y-auto bg-zinc-50 px-5 py-6 md:px-8">
