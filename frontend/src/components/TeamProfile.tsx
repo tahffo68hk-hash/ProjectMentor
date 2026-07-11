@@ -1,3 +1,4 @@
+import { profileSectionLabels, teamProfileSections } from "@/lib/teamProfile";
 import type { TeamProfile as TeamProfileType } from "@/types/chat";
 
 type TeamProfileProps = {
@@ -9,22 +10,9 @@ type ProfileSectionProps = {
   items: string[];
 };
 
-const sections: Array<{
-  key: keyof TeamProfileType;
-  title: string;
-}> = [
-  { key: "membersAndMajors", title: "成员与专业" },
-  { key: "skills", title: "技能" },
-  { key: "interests", title: "兴趣方向" },
-  { key: "competitions", title: "比赛信息" },
-  { key: "resources", title: "可用资源" },
-  { key: "timeAndBudget", title: "时间与预算" },
-  { key: "targetAwards", title: "目标奖项" },
-];
-
 export default function TeamProfile({ profile }: TeamProfileProps) {
-  const completedCount = sections.filter(({ key }) => profile[key].length > 0).length;
-  const completion = Math.round((completedCount / sections.length) * 100);
+  const completedCount = teamProfileSections.filter((key) => profile[key].length > 0).length;
+  const completion = Math.round((completedCount / teamProfileSections.length) * 100);
 
   return (
     <aside className="hidden w-80 shrink-0 border-l border-zinc-200 bg-white p-6 lg:block">
@@ -49,8 +37,8 @@ export default function TeamProfile({ profile }: TeamProfileProps) {
       </div>
 
       <div className="mt-6 space-y-5">
-        {sections.map(({ key, title }) => (
-          <ProfileSection key={key} title={title} items={profile[key]} />
+        {teamProfileSections.map((key) => (
+          <ProfileSection key={key} title={profileSectionLabels[key]} items={profile[key]} />
         ))}
       </div>
     </aside>
@@ -63,7 +51,7 @@ function ProfileSection({ title, items }: ProfileSectionProps) {
       <h3 className="text-sm font-semibold text-zinc-950">{title}</h3>
 
       {items.length === 0 ? (
-        <p className="mt-2 text-sm text-zinc-400">等待识别...</p>
+        <p className="mt-2 text-sm text-zinc-400">等待确认写入...</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {items.map((item) => (

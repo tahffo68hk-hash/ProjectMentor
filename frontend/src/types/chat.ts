@@ -15,3 +15,11 @@ export type TeamProfile = {
   timeAndBudget: string[];
   targetAwards: string[];
 };
+
+export type TeamProfileSectionKey = keyof TeamProfile;
+
+export type PendingProfileItem = {
+  id: string;
+  section: TeamProfileSectionKey;
+  text: string;
+};
