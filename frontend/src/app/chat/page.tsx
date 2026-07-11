@@ -6,13 +6,18 @@ import ChatMessage from "@/components/ChatMessage";
 import PendingProfileCard from "@/components/PendingProfileCard";
 import TeamProfile from "@/components/TeamProfile";
 import {
+  createLocalInterviewResult,
+  pendingProfileToItems,
+} from "@/lib/interviewFallback";
+import {
   emptyTeamProfile,
-  extractPendingProfileItems,
   mergeConfirmedItems,
   normalizeTeamProfile,
 } from "@/lib/teamProfile";
 import type {
+  ApiChatMessage,
   ChatMessage as ChatMessageType,
+  InterviewApiResponse,
   PendingProfileItem,
   TeamProfile as TeamProfileType,
   TeamProfileSectionKey,
@@ -29,66 +34,166 @@ const initialMessages: ChatMessageType[] = [
   },
 ];
 
-function createMentorReply(pendingItems: PendingProfileItem[]): string {
-  if (pendingItems.length === 0) {
-    return "我还没有识别到明确的团队画像信息。你可以补充专业、技能、比赛、资源、预算或目标奖项，我会先生成待确认画像。";
+type RetryPayload = {
+  message: string;
+  messages: ApiChatMessage[];
+  confirmedProfile: TeamProfileType;
+};
+
+function loadStoredTeamProfile(): TeamProfileType {
+  if (typeof window === "undefined") {
+    return emptyTeamProfile;
   }
 
-  return `我提取到了 ${pendingItems.length} 条候选画像信息，已经放到下方待确认卡片里。\n\n你可以先修改、删除不准确的内容，再点击“确认写入”。`;
+  const storedProfile = window.localStorage.getItem(teamProfileStorageKey);
+
+  if (!storedProfile) {
+    return emptyTeamProfile;
+  }
+
+  try {
+    return normalizeTeamProfile(JSON.parse(storedProfile));
+  } catch {
+    return emptyTeamProfile;
+  }
+}
+
+function toApiMessages(messages: ChatMessageType[]): ApiChatMessage[] {
+  return messages.map((message) => ({
+    role: message.role === "mentor" ? "assistant" : "user",
+    content: message.content,
+  }));
+}
+
+function isInterviewApiResponse(value: unknown): value is InterviewApiResponse {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Partial<InterviewApiResponse>;
+
+  return (
+    typeof record.reply === "string" &&
+    Array.isArray(record.observations) &&
+    record.observations.every((item) => typeof item === "string") &&
+    !!record.pendingProfile &&
+    typeof record.pendingProfile === "object" &&
+    Array.isArray(record.missingFields) &&
+    record.missingFields.every((item) => typeof item === "string") &&
+    typeof record.interviewComplete === "boolean"
+  );
 }
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>(initialMessages);
   const [input, setInput] = useState("");
-  const [teamProfile, setTeamProfile] = useState<TeamProfileType>(emptyTeamProfile);
+  const [teamProfile, setTeamProfile] = useState<TeamProfileType>(loadStoredTeamProfile);
   const [pendingItems, setPendingItems] = useState<PendingProfileItem[]>([]);
-  const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [retryPayload, setRetryPayload] = useState<RetryPayload | null>(null);
 
   useEffect(() => {
-    const storedProfile = window.localStorage.getItem(teamProfileStorageKey);
-
-    if (storedProfile) {
-      try {
-        setTeamProfile(normalizeTeamProfile(JSON.parse(storedProfile)));
-      } catch {
-        setTeamProfile(emptyTeamProfile);
-      }
-    }
-
-    setHasLoadedProfile(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hasLoadedProfile) {
+    if (typeof window === "undefined") {
       return;
     }
 
     window.localStorage.setItem(teamProfileStorageKey, JSON.stringify(teamProfile));
-  }, [hasLoadedProfile, teamProfile]);
+  }, [teamProfile]);
+
+  async function requestInterview(payload: RetryPayload) {
+    setIsLoading(true);
+    setErrorMessage("");
+
+    try {
+      const response = await fetch("/api/interview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("访谈接口暂时不可用。");
+      }
+
+      const data: unknown = await response.json();
+
+      if (!isInterviewApiResponse(data)) {
+        throw new Error("访谈接口返回格式不正确。");
+      }
+
+      applyInterviewResult(data);
+      setRetryPayload(null);
+    } catch (error) {
+      const fallbackResult = createLocalInterviewResult(
+        payload.message,
+        payload.confirmedProfile,
+      );
+
+      applyInterviewResult(fallbackResult);
+      setRetryPayload(payload);
+      setErrorMessage(
+        error instanceof Error
+          ? `${error.message} 已自动使用本地模拟结果。`
+          : "请求失败，已自动使用本地模拟结果。",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function applyInterviewResult(result: InterviewApiResponse) {
+    const timestamp = Date.now();
+    const observationText =
+      result.observations.length > 0
+        ? `\n\n观察：${result.observations.join("；")}`
+        : "";
+    const completionText = result.interviewComplete
+      ? "\n\n团队访谈信息已经比较完整。"
+      : "";
+
+    setMessages((currentMessages) => [
+      ...currentMessages,
+      {
+        id: timestamp,
+        role: "mentor",
+        content: `${result.reply}${observationText}${completionText}`,
+      },
+    ]);
+    setPendingItems(pendingProfileToItems(result.pendingProfile));
+  }
 
   function handleSendMessage() {
     const content = input.trim();
 
-    if (!content) {
+    if (!content || isLoading) {
       return;
     }
 
-    const extractedItems = extractPendingProfileItems(content);
-    const timestamp = Date.now();
     const userMessage: ChatMessageType = {
-      id: timestamp,
+      id: Date.now(),
       role: "user",
       content,
     };
-    const mentorReply: ChatMessageType = {
-      id: timestamp + 1,
-      role: "mentor",
-      content: createMentorReply(extractedItems),
+    const nextMessages = [...messages, userMessage];
+    const payload: RetryPayload = {
+      message: content,
+      messages: toApiMessages(nextMessages).slice(-10),
+      confirmedProfile: teamProfile,
     };
 
-    setMessages((currentMessages) => [...currentMessages, userMessage, mentorReply]);
-    setPendingItems(extractedItems);
+    setMessages(nextMessages);
+    setPendingItems([]);
     setInput("");
+    void requestInterview(payload);
+  }
+
+  function handleRetry() {
+    if (!retryPayload || isLoading) {
+      return;
+    }
+
+    void requestInterview(retryPayload);
   }
 
   function handleConfirmPendingProfile() {
@@ -136,6 +241,26 @@ export default function ChatPage() {
               <ChatMessage key={message.id} message={message} />
             ))}
 
+            {isLoading ? (
+              <div className="rounded-2xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-500 shadow-sm">
+                正在生成下一条访谈问题...
+              </div>
+            ) : null}
+
+            {errorMessage ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                <p>{errorMessage}</p>
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  disabled={isLoading || !retryPayload}
+                  className="mt-3 rounded-lg bg-red-700 px-3 py-2 font-medium text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-red-300"
+                >
+                  重试真实接口
+                </button>
+              </div>
+            ) : null}
+
             <PendingProfileCard
               items={pendingItems}
               onConfirm={handleConfirmPendingProfile}
@@ -146,7 +271,12 @@ export default function ChatPage() {
             />
           </div>
 
-          <ChatInput value={input} onChange={setInput} onSubmit={handleSendMessage} />
+          <ChatInput
+            value={input}
+            onChange={setInput}
+            onSubmit={handleSendMessage}
+            disabled={isLoading}
+          />
         </section>
 
         <TeamProfile profile={teamProfile} />
