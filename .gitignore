@@ -1,0 +1,5 @@
+# Word/WPS temporary files
+~$*
+
+# Local Codex/Git worktrees
+.worktrees/
