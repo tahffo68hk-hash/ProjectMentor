@@ -1,9 +1,9 @@
-export {};
+import type { ProjectMentorDesktopApi } from "../../../shared/ipc";
 
 declare global {
   interface Window {
-    projectMentor: {
-      getAppVersion(): Promise<string>;
-    };
+    projectMentor?: ProjectMentorDesktopApi;
   }
 }
+
+export {};

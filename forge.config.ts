@@ -5,6 +5,7 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    extraResource: ["frontend/out"],
   },
   makers: [new MakerSquirrel({})],
   plugins: [

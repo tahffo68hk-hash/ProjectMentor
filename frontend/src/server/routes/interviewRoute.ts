@@ -10,7 +10,7 @@ import type {
   TeamProfile,
 } from "@/types/chat";
 
-export async function POST(request: Request) {
+export async function handleInterviewPost(request: Request) {
   let body: unknown;
 
   try {

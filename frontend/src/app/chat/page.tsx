@@ -10,6 +10,7 @@ import {
   createLocalInterviewResult,
   pendingProfileToItems,
 } from "@/lib/interviewFallback";
+import { interview } from "@/lib/rendererApi";
 import {
   emptyTeamProfile,
   mergeConfirmedItems,
@@ -125,17 +126,7 @@ export default function ChatPage() {
     setErrorMessage("");
 
     try {
-      const response = await fetch("/api/interview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error("访谈接口暂时不可用。");
-      }
-
-      const data: unknown = await response.json();
+      const data: unknown = await interview(payload);
 
       if (!isInterviewApiResponse(data)) {
         throw new Error("访谈接口返回格式不正确。");

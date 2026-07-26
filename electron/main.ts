@@ -1,7 +1,27 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import {
+  app,
+  BrowserWindow,
+  net,
+  protocol,
+} from "electron";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { registerProjectMentorIpc } from "./ipc";
 
 const DEVELOPMENT_URL = "http://localhost:3000";
+const PRODUCTION_URL = "app://projectmentor/";
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "app",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+]);
 
 function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -24,15 +44,14 @@ function createMainWindow(): BrowserWindow {
   });
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
+    if (!isAllowedNavigation(navigationUrl)) {
+      event.preventDefault();
+    }
+  });
 
   if (app.isPackaged) {
-    // TODO: Load the exported Next.js renderer from frontend/out.
-    void mainWindow.loadURL(
-      "data:text/html;charset=utf-8," +
-        encodeURIComponent(
-          "<main style=\"font-family:system-ui;padding:32px\"><h1>ProjectMentor</h1><p>Production renderer packaging is planned for the next migration phase.</p></main>",
-        ),
-    );
+    void mainWindow.loadURL(PRODUCTION_URL);
   } else {
     void mainWindow.loadURL(DEVELOPMENT_URL);
   }
@@ -41,7 +60,8 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
-  ipcMain.handle("app:get-version", () => app.getVersion());
+  registerStaticRendererProtocol();
+  registerProjectMentorIpc();
   createMainWindow();
 
   app.on("activate", () => {
@@ -56,3 +76,66 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
+
+function registerStaticRendererProtocol(): void {
+  protocol.handle("app", (request) => {
+    const filePath = resolveRendererPath(request.url);
+
+    if (!filePath) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    return net.fetch(pathToFileURL(filePath).toString());
+  });
+}
+
+function resolveRendererPath(requestUrl: string): string | null {
+  try {
+    const url = new URL(requestUrl);
+
+    if (url.protocol !== "app:" || url.host !== "projectmentor") {
+      return null;
+    }
+
+    const rendererRoot = path.resolve(process.resourcesPath, "out");
+    let pathname = decodeURIComponent(url.pathname).replaceAll("\\", "/");
+
+    if (pathname.includes("\0")) {
+      return null;
+    }
+
+    if (pathname.endsWith("/")) {
+      pathname += "index.html";
+    } else if (path.extname(pathname) === "") {
+      pathname += "/index.html";
+    }
+
+    const filePath = path.resolve(rendererRoot, `.${pathname}`);
+    const relativePath = path.relative(rendererRoot, filePath);
+
+    if (
+      relativePath.startsWith("..") ||
+      path.isAbsolute(relativePath)
+    ) {
+      return null;
+    }
+
+    return filePath;
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedNavigation(navigationUrl: string): boolean {
+  try {
+    const url = new URL(navigationUrl);
+
+    if (app.isPackaged) {
+      return url.protocol === "app:" && url.host === "projectmentor";
+    }
+
+    return url.origin === DEVELOPMENT_URL;
+  } catch {
+    return false;
+  }
+}

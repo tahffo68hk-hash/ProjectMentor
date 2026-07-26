@@ -5,7 +5,7 @@ import {
 } from "@/lib/ai/recommendationProvider";
 import type { RecommendationRequest } from "@/types/chat";
 
-export async function POST(request: Request) {
+export async function handleRecommendationsPost(request: Request) {
   let body: unknown;
 
   try {

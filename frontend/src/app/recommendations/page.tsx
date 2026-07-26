@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getRecommendations } from "@/lib/rendererApi";
 import { emptyTeamProfile, normalizeTeamProfile } from "@/lib/teamProfile";
 import type {
   ProjectRecommendation,
@@ -35,6 +36,27 @@ function hasProfileData(profile: TeamProfile) {
   return Object.values(profile).some((items) => items.length > 0);
 }
 
+function loadStoredSelectedProjectId() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const storedProject = window.localStorage.getItem(selectedProjectStorageKey);
+
+  if (!storedProject) {
+    return "";
+  }
+
+  try {
+    const selectedProject = JSON.parse(storedProject) as Partial<SelectedProject>;
+    return typeof selectedProject.recommendation?.id === "string"
+      ? selectedProject.recommendation.id
+      : "";
+  } catch {
+    return "";
+  }
+}
+
 function isRecommendationResponse(value: unknown): value is RecommendationResponse {
   if (!value || typeof value !== "object") {
     return false;
@@ -55,7 +77,7 @@ export default function RecommendationsPage() {
   const [teamProfile] = useState<TeamProfile>(loadStoredTeamProfile);
   const [response, setResponse] = useState<RecommendationResponse | null>(null);
   const [expandedId, setExpandedId] = useState("");
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(loadStoredSelectedProjectId);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -73,17 +95,9 @@ export default function RecommendationsPage() {
     setErrorMessage("");
 
     try {
-      const apiResponse = await fetch("/api/recommendations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmedProfile: teamProfile }),
+      const data: unknown = await getRecommendations({
+        confirmedProfile: teamProfile,
       });
-
-      if (!apiResponse.ok) {
-        throw new Error("推荐接口暂时不可用。");
-      }
-
-      const data: unknown = await apiResponse.json();
 
       if (!isRecommendationResponse(data)) {
         throw new Error("推荐接口返回格式不正确。");
