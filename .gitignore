@@ -3,3 +3,6 @@
 
 # Local Codex/Git worktrees
 .worktrees/
+node_modules/
+.vite/
+out/
