@@ -1,6 +1,9 @@
 # Word/WPS temporary files
 ~$*
 
+# Local verification leftovers
+.tmp-production-verification/
+
 # Local Codex/Git worktrees
 .worktrees/
 node_modules/
